@@ -4,11 +4,35 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$oldSecurityProtocol = [Net.ServicePointManager]::SecurityProtocol
+[Net.ServicePointManager]::SecurityProtocol = $oldSecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $bundleRoot = Join-Path $projectRoot "vendor\zapret-win-bundle"
 $blobRoot = Join-Path $projectRoot "runtime\blobs"
 $bundleCommit = "6eb463a6758fb48cd101bc55dfd057e6e9d98af1"
+$bundleMarker = ".zapret2-webcontrol-commit"
+$requiredBundleFiles = @(
+    "zapret-winws\winws2.exe",
+    "zapret-winws\lua\zapret-lib.lua",
+    "zapret-winws\lua\zapret-antidpi.lua",
+    "zapret-winws\lua\zapret-auto.lua",
+    "zapret-winws\windivert.filter\windivert_part.discord_media.txt",
+    "zapret-winws\windivert.filter\windivert_part.stun.txt",
+    "blockcheck\zapret2\blockcheck2.sh",
+    "cygwin\bin\bash.exe",
+    "cygwin\bin\cygpath.exe"
+)
+
+function Test-BundleFiles {
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    foreach ($relativePath in $requiredBundleFiles) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Root $relativePath))) {
+            throw "В Windows-бандле отсутствует обязательный файл: $relativePath"
+        }
+    }
+}
 
 function Invoke-GitChecked {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
@@ -20,58 +44,69 @@ function Invoke-GitChecked {
 }
 
 function Install-ZapretBundle {
-    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
-        throw "Git не найден. Установите Git for Windows или используйте -SkipBundle."
-    }
-
     if (-not (Test-Path -LiteralPath $bundleRoot)) {
-        New-Item -ItemType Directory -Path (Split-Path $bundleRoot) -Force | Out-Null
-        Invoke-GitChecked -Arguments @(
-            "clone",
-            "https://github.com/bol-van/zapret-win-bundle.git",
-            $bundleRoot
-        )
-    }
-    elseif (-not (Test-Path -LiteralPath (Join-Path $bundleRoot ".git"))) {
-        throw "Каталог $bundleRoot уже существует, но не является Git checkout."
-    }
+        $temporaryRoot = Join-Path ([IO.Path]::GetTempPath()) ("zapret2-webcontrol-bundle-" + [Guid]::NewGuid().ToString("N"))
+        $archivePath = Join-Path $temporaryRoot "bundle.zip"
+        $extractRoot = Join-Path $temporaryRoot "extracted"
+        try {
+            New-Item -ItemType Directory -Path $extractRoot -Force | Out-Null
+            Write-Host "Скачиваю закреплённый Windows-бандл..."
+            Invoke-WebRequest -Uri "https://codeload.github.com/bol-van/zapret-win-bundle/zip/$bundleCommit" -OutFile $archivePath -UseBasicParsing
+            Expand-Archive -LiteralPath $archivePath -DestinationPath $extractRoot -Force
 
-    $currentCommit = (& git -C $bundleRoot rev-parse HEAD).Trim()
-    if ($LASTEXITCODE -ne 0) {
-        throw "Не удалось определить commit Windows-бандла."
+            $archiveRoots = @(Get-ChildItem -LiteralPath $extractRoot -Directory)
+            if ($archiveRoots.Count -ne 1) {
+                throw "Архив Windows-бандла имеет неожиданный формат."
+            }
+            $sourceRoot = $archiveRoots[0].FullName
+            Test-BundleFiles -Root $sourceRoot
+            Set-Content -LiteralPath (Join-Path $sourceRoot $bundleMarker) -Value $bundleCommit -Encoding Ascii -NoNewline
+
+            New-Item -ItemType Directory -Path (Split-Path $bundleRoot) -Force | Out-Null
+            Move-Item -LiteralPath $sourceRoot -Destination $bundleRoot
+        }
+        finally {
+            if (Test-Path -LiteralPath $temporaryRoot) {
+                Remove-Item -LiteralPath $temporaryRoot -Recurse -Force
+            }
+        }
     }
-    if ($currentCommit -ne $bundleCommit) {
-        $dirty = & git -C $bundleRoot status --porcelain
+    elseif (Test-Path -LiteralPath (Join-Path $bundleRoot $bundleMarker)) {
+        $currentCommit = (Get-Content -LiteralPath (Join-Path $bundleRoot $bundleMarker) -Raw).Trim()
+        if ($currentCommit -ne $bundleCommit) {
+            throw "В $bundleRoot находится ZIP-бандл другой версии ($currentCommit). Он не будет перезаписан автоматически."
+        }
+    }
+    elseif (Test-Path -LiteralPath (Join-Path $bundleRoot ".git")) {
+        if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
+            throw "Для проверки существующего Git-бандла нужен Git for Windows. Новая установка из ZIP Git не требует."
+        }
+
+        $currentCommit = (& git -C $bundleRoot rev-parse HEAD).Trim()
         if ($LASTEXITCODE -ne 0) {
-            throw "Не удалось проверить состояние Windows-бандла."
+            throw "Не удалось определить commit Windows-бандла."
         }
-        if ($dirty) {
-            throw "В Windows-бандле есть локальные изменения; bootstrap не будет их перезаписывать."
+        if ($currentCommit -ne $bundleCommit) {
+            $dirty = & git -C $bundleRoot status --porcelain
+            if ($LASTEXITCODE -ne 0) {
+                throw "Не удалось проверить состояние Windows-бандла."
+            }
+            if ($dirty) {
+                throw "В Windows-бандле есть локальные изменения; bootstrap не будет их перезаписывать."
+            }
+            Invoke-GitChecked -Arguments @(
+                "-C", $bundleRoot, "fetch", "origin", $bundleCommit
+            )
+            Invoke-GitChecked -Arguments @(
+                "-C", $bundleRoot, "checkout", "--detach", $bundleCommit
+            )
         }
-        Invoke-GitChecked -Arguments @(
-            "-C", $bundleRoot, "fetch", "origin", $bundleCommit
-        )
-        Invoke-GitChecked -Arguments @(
-            "-C", $bundleRoot, "checkout", "--detach", $bundleCommit
-        )
+    }
+    else {
+        throw "Каталог $bundleRoot уже существует, но его версия не подтверждена. Переименуйте его вручную и повторите bootstrap."
     }
 
-    $required = @(
-        "zapret-winws\winws2.exe",
-        "zapret-winws\lua\zapret-lib.lua",
-        "zapret-winws\lua\zapret-antidpi.lua",
-        "zapret-winws\lua\zapret-auto.lua",
-        "zapret-winws\windivert.filter\windivert_part.discord_media.txt",
-        "zapret-winws\windivert.filter\windivert_part.stun.txt",
-        "blockcheck\zapret2\blockcheck2.sh",
-        "cygwin\bin\bash.exe",
-        "cygwin\bin\cygpath.exe",
-    )
-    foreach ($relativePath in $required) {
-        if (-not (Test-Path -LiteralPath (Join-Path $bundleRoot $relativePath))) {
-            throw "В закреплённом Windows-бандле отсутствует: $relativePath"
-        }
-    }
+    Test-BundleFiles -Root $bundleRoot
     Write-Host "Windows-бандл готов: $bundleCommit"
 }
 
