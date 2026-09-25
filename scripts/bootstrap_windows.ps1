@@ -10,6 +10,7 @@ $oldSecurityProtocol = [Net.ServicePointManager]::SecurityProtocol
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $bundleRoot = Join-Path $projectRoot "vendor\zapret-win-bundle"
 $blobRoot = Join-Path $projectRoot "runtime\blobs"
+$listRoot = Join-Path $projectRoot "runtime\lists"
 $bundleCommit = "6eb463a6758fb48cd101bc55dfd057e6e9d98af1"
 $bundleMarker = ".zapret2-webcontrol-commit"
 $requiredBundleFiles = @(
@@ -148,6 +149,13 @@ if (-not $SkipBundle) {
 }
 
 New-Item -ItemType Directory -Path $blobRoot -Force | Out-Null
+New-Item -ItemType Directory -Path $listRoot -Force | Out-Null
+
+$discordList = Join-Path $listRoot "zapret_hosts_discord.txt"
+if (-not (Test-Path -LiteralPath $discordList)) {
+    Copy-Item -LiteralPath (Join-Path $projectRoot "assets\lists\discord.txt") -Destination $discordList
+    Write-Host "Создан начальный список Discord."
+}
 
 $flowsealCommit = "865da4f4c3659523bf79bc6edf0446e7d7969614"
 $openwrtCommit = "1b04a87558ec7965bfed0ef7fb557997872dd699"
@@ -166,6 +174,11 @@ $resources = @(
         Name = "quic_initial_4pda_to.bin"
         Uri = "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/$flowsealCommit/bin/quic_initial_4pda_to.bin"
         Sha256 = "E065870CB0D13152E6132807BBF42218A9E7CD8D96F5602B61674CC540F3A56E"
+    },
+    @{
+        Name = "tls_clienthello_www_4pda_to.bin"
+        Uri = "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/$flowsealCommit/bin/tls_clienthello_4pda_to.bin"
+        Sha256 = "EEFEAF09DDE8D69B1F176212541F63C68B314A33A335ECED99A8A29F17254DA8"
     },
     @{
         Name = "tls_clienthello_www_onetrust_com.bin"
