@@ -74,6 +74,8 @@ def create_server(backend=None, host: str = "127.0.0.1", port: int = 8787):
                 self._send_json(runtime_backend.blockcheck_log())
             elif route == "/api/v1/autostart":
                 self._send_json(runtime_backend.autostart_status())
+            elif route == "/api/v1/panel-autostart":
+                self._send_json(runtime_backend.panel_autostart_status())
             else:
                 self._send_json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
 
@@ -89,6 +91,8 @@ def create_server(backend=None, host: str = "127.0.0.1", port: int = 8787):
                 "/api/v1/blockcheck/stop",
                 "/api/v1/autostart/install",
                 "/api/v1/autostart/remove",
+                "/api/v1/panel-autostart/install",
+                "/api/v1/panel-autostart/remove",
             }
             if route not in allowed:
                 self._send_json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
@@ -154,6 +158,12 @@ def create_server(backend=None, host: str = "127.0.0.1", port: int = 8787):
                     return
                 if route == "/api/v1/autostart/remove":
                     self._send_json({"status": runtime_backend.remove_autostart()})
+                    return
+                if route == "/api/v1/panel-autostart/install":
+                    self._send_json({"status": runtime_backend.install_panel_autostart()})
+                    return
+                if route == "/api/v1/panel-autostart/remove":
+                    self._send_json({"status": runtime_backend.remove_panel_autostart()})
                     return
                 status = runtime_backend.start() if route.endswith("/start") else runtime_backend.stop()
             except ValueError as error:

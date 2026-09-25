@@ -24,6 +24,8 @@ class WindowsBackend:
     PROCESS_NAME = "winws2.exe"
     SERVICE_NAME = "zapret2-webcontrol"
     SERVICE_DISPLAY_NAME = "Zapret2 WebControl"
+    PANEL_RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    PANEL_RUN_NAME = "Zapret2 WebControl Panel"
 
     @property
     def project_dir(self) -> Path:
@@ -146,6 +148,7 @@ class WindowsBackend:
                 "runtime_logs",
                 "blockcheck2",
                 "windows_service",
+                "panel_autostart",
                 "windivert_capture",
                 "process_control",
             ),
@@ -498,6 +501,45 @@ class WindowsBackend:
             "can_manage": self._is_admin(),
             "warnings": preview.warnings,
         }
+
+    def panel_autostart_status(self) -> dict:
+        expected = subprocess.list2cmdline([
+            str(self.project_dir / ".venv" / "Scripts" / "pythonw.exe"),
+            str(self.project_dir / "scripts" / "panel_background.pyw"),
+        ])
+        command = None
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self.PANEL_RUN_KEY) as key:
+                command = str(winreg.QueryValueEx(key, self.PANEL_RUN_NAME)[0])
+        except FileNotFoundError:
+            pass
+        return {
+            "installed": command is not None,
+            "in_sync": command == expected,
+            "command": command,
+            "expected_command": expected,
+            "can_manage": (self.project_dir / ".venv" / "Scripts" / "pythonw.exe").is_file(),
+        }
+
+    def install_panel_autostart(self) -> dict:
+        status = self.panel_autostart_status()
+        if not status["can_manage"]:
+            raise RuntimeError("Сначала запустите setup.bat: pythonw.exe не найден в .venv")
+        with winreg.CreateKeyEx(
+            winreg.HKEY_CURRENT_USER, self.PANEL_RUN_KEY, 0, winreg.KEY_SET_VALUE
+        ) as key:
+            winreg.SetValueEx(key, self.PANEL_RUN_NAME, 0, winreg.REG_SZ, status["expected_command"])
+        return self.panel_autostart_status()
+
+    def remove_panel_autostart(self) -> dict:
+        try:
+            with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, self.PANEL_RUN_KEY, 0, winreg.KEY_SET_VALUE
+            ) as key:
+                winreg.DeleteValue(key, self.PANEL_RUN_NAME)
+        except FileNotFoundError:
+            pass
+        return self.panel_autostart_status()
 
     def install_autostart(self) -> dict:
         if not self._is_admin():

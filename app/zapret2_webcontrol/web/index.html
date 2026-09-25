@@ -31,10 +31,14 @@
         <div class="status-grid">
           <div class="status-row"><span>Статус</span><strong id="runtime-summary" class="status-pill status-muted">Загрузка…</strong></div>
           <div class="status-row"><span>Конфигурация</span><strong id="configuration-summary" class="status-pill status-muted">Проверка…</strong></div>
-          <div class="status-row"><span>Автозапуск</span><strong id="autostart-summary" class="status-pill status-muted">Проверка…</strong></div>
+          <div class="status-row"><span>Автозапуск обхода</span><strong id="autostart-summary" class="status-pill status-muted">Проверка…</strong></div>
+          <div class="status-row"><span>Панель в фоне</span><strong id="panel-autostart-summary" class="status-pill status-muted">Проверка…</strong></div>
         </div>
         <div class="control-footer">
-          <button class="button button-ghost" id="autostart-toggle">Включить автозапуск</button>
+          <div class="button-group">
+            <button class="button button-ghost" id="autostart-toggle">Включить автозапуск обхода</button>
+            <button class="button button-ghost" id="panel-autostart-toggle">Включить автозапуск панели</button>
+          </div>
           <div class="button-group">
             <button class="button button-primary" id="sync-autostart" hidden>Применить к службе</button>
             <button class="button button-secondary" id="refresh">Обновить статус</button>

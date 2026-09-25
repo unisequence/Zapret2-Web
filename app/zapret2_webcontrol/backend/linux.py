@@ -205,6 +205,15 @@ class LinuxBackend:
     def remove_autostart(self) -> dict:
         raise RuntimeError("Linux service/firewall adapter ещё не подключён")
 
+    def panel_autostart_status(self) -> dict:
+        return {"installed": False, "in_sync": False, "can_manage": False}
+
+    def install_panel_autostart(self) -> dict:
+        raise RuntimeError("Фоновый автозапуск панели пока доступен только в Windows")
+
+    def remove_panel_autostart(self) -> dict:
+        raise RuntimeError("Фоновый автозапуск панели пока доступен только в Windows")
+
     def start(self) -> RuntimeStatus:
         raise RuntimeError(
             "Linux-запуск отключён до реализации атомарной настройки NFQUEUE и firewall"

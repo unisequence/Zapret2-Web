@@ -70,3 +70,12 @@ class Backend(Protocol):
 
     def stop(self) -> RuntimeStatus:
         """Stop only a process managed by this backend instance."""
+
+    def panel_autostart_status(self) -> dict:
+        """Report background web-panel autostart separately from DPI autostart."""
+
+    def install_panel_autostart(self) -> dict:
+        """Enable background panel startup for the current user."""
+
+    def remove_panel_autostart(self) -> dict:
+        """Disable background panel startup for the current user."""

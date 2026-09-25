@@ -8,6 +8,7 @@ const state = {
   preview: null,
   blockcheck: null,
   autostart: null,
+  panelAutostart: null,
 };
 
 async function requestJson(url, options = {}) {
@@ -109,17 +110,17 @@ function renderAutostart(status) {
   if (!status.installed) {
     summary.textContent = "Выключен";
     summary.className = "status-pill status-muted";
-    toggle.textContent = "Включить автозапуск";
+    toggle.textContent = "Включить автозапуск обхода";
     toggle.className = "button button-ghost";
   } else if (!status.in_sync) {
     summary.textContent = "Требует применения";
     summary.className = "status-pill status-danger";
-    toggle.textContent = "Выключить автозапуск";
+    toggle.textContent = "Выключить автозапуск обхода";
     toggle.className = "button button-danger-outline";
   } else {
     summary.textContent = status.running ? "Включен · работает" : "Включен";
     summary.className = `status-pill ${status.running ? "status-ok" : "status-muted"}`;
-    toggle.textContent = "Выключить автозапуск";
+    toggle.textContent = "Выключить автозапуск обхода";
     toggle.className = "button button-danger-outline";
   }
   toggle.disabled = !status.can_manage;
@@ -134,6 +135,18 @@ function renderAutostart(status) {
         ? "Остановлена, автоматический запуск"
         : "Остановлена, конфигурация устарела";
   if (status.installed && !status.in_sync) byId("start-runtime").disabled = true;
+}
+
+function renderPanelAutostart(status) {
+  state.panelAutostart = status;
+  const summary = byId("panel-autostart-summary");
+  const toggle = byId("panel-autostart-toggle");
+  summary.textContent = !status.installed ? "Выключен" : status.in_sync ? "Включен · после входа" : "Требует обновления";
+  summary.className = `status-pill ${status.installed && !status.in_sync ? "status-danger" : "status-muted"}`;
+  toggle.textContent = status.installed ? "Выключить автозапуск панели" : "Включить автозапуск панели";
+  toggle.className = status.installed ? "button button-danger-outline" : "button button-ghost";
+  toggle.disabled = !status.can_manage && !status.installed;
+  toggle.title = status.can_manage ? "" : "Сначала запустите setup.bat";
 }
 
 function makeCell(text) {
@@ -241,7 +254,7 @@ function renderLists(items, running) {
 
 async function loadDashboard() {
   try {
-    const [system, status, strategies, preview, lists, blockcheck, autostart] = await Promise.all([
+    const [system, status, strategies, preview, lists, blockcheck, autostart, panelAutostart] = await Promise.all([
       requestJson("/api/v1/system"),
       requestJson("/api/v1/status"),
       requestJson("/api/v1/strategies"),
@@ -249,6 +262,7 @@ async function loadDashboard() {
       requestJson("/api/v1/lists"),
       requestJson("/api/v1/blockcheck/status"),
       requestJson("/api/v1/autostart"),
+      requestJson("/api/v1/panel-autostart"),
     ]);
     state.system = system;
     state.status = status;
@@ -261,6 +275,7 @@ async function loadDashboard() {
     renderLists(lists.items, status.running);
     renderBlockcheck(blockcheck);
     renderAutostart(autostart);
+    renderPanelAutostart(panelAutostart);
     setConnection(true);
   } catch (error) {
     setConnection(false);
@@ -446,6 +461,21 @@ async function toggleAutostart() {
   }
 }
 
+async function togglePanelAutostart() {
+  const installed = state.panelAutostart?.installed;
+  const message = installed
+    ? "Убрать фоновую панель из автозапуска текущего пользователя? Уже запущенная панель продолжит работать."
+    : "Запускать веб-панель без окна после входа в Windows? Обход winws2 настраивается отдельно.";
+  if (!window.confirm(message)) return;
+  try {
+    await sendJson("POST", `/api/v1/panel-autostart/${installed ? "remove" : "install"}`, { confirm: true });
+    await loadDashboard();
+    showFlash(installed ? "Автозапуск панели выключен" : "Панель будет запускаться в фоне после входа в Windows");
+  } catch (error) {
+    showFlash(error.message, true);
+  }
+}
+
 function openStrategyEditor(strategyId) {
   const strategy = state.strategies.find((item) => item.id === strategyId);
   if (!strategy) return;
@@ -612,6 +642,7 @@ byId("start-blockcheck").addEventListener("click", startBlockcheck);
 byId("stop-blockcheck").addEventListener("click", stopBlockcheck);
 byId("refresh-blockcheck").addEventListener("click", loadBlockcheck);
 byId("autostart-toggle").addEventListener("click", toggleAutostart);
+byId("panel-autostart-toggle").addEventListener("click", togglePanelAutostart);
 byId("sync-autostart").addEventListener("click", installAutostart);
 
 loadDashboard();

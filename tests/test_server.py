@@ -5,7 +5,7 @@ import unittest
 from dataclasses import dataclass, replace
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import MagicMock, PropertyMock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -48,6 +48,7 @@ class FakeBackend:
         self._log = "test log\n"
         self._blockcheck_running = False
         self._autostart_installed = False
+        self._panel_autostart_installed = False
 
     def info(self):
         return FakeInfo()
@@ -184,6 +185,52 @@ class FakeBackend:
     def remove_autostart(self):
         self._autostart_installed = False
         return self.autostart_status()
+
+    def panel_autostart_status(self):
+        return {
+            "installed": self._panel_autostart_installed,
+            "in_sync": self._panel_autostart_installed,
+            "can_manage": True,
+        }
+
+    def install_panel_autostart(self):
+        self._panel_autostart_installed = True
+        return self.panel_autostart_status()
+
+    def remove_panel_autostart(self):
+        self._panel_autostart_installed = False
+        return self.panel_autostart_status()
+
+
+@unittest.skipUnless(sys.platform == "win32", "Windows registry test")
+class PanelAutostartTests(unittest.TestCase):
+    def test_user_logon_command_uses_windowless_venv_python(self):
+        with TemporaryDirectory() as temp:
+            root = Path(temp)
+            pythonw = root / ".venv" / "Scripts" / "pythonw.exe"
+            pythonw.parent.mkdir(parents=True)
+            pythonw.write_bytes(b"")
+            with (
+                patch.object(WindowsBackend, "project_dir", new_callable=PropertyMock, return_value=root),
+                patch("zapret2_webcontrol.backend.windows.winreg.OpenKey", side_effect=FileNotFoundError),
+            ):
+                backend = WindowsBackend()
+                status = backend.panel_autostart_status()
+                self.assertFalse(status["installed"])
+                self.assertTrue(status["can_manage"])
+                self.assertIn("pythonw.exe", status["expected_command"])
+                self.assertIn("panel_background.pyw", status["expected_command"])
+
+                key = MagicMock()
+                with (
+                    patch("zapret2_webcontrol.backend.windows.winreg.CreateKeyEx") as create_key,
+                    patch("zapret2_webcontrol.backend.windows.winreg.SetValueEx") as set_value,
+                ):
+                    create_key.return_value.__enter__.return_value = key
+                    backend.install_panel_autostart()
+                    set_value.assert_called_once_with(
+                        key, backend.PANEL_RUN_NAME, 0, 1, status["expected_command"]
+                    )
 
 
 class StrategyCatalogTests(unittest.TestCase):
@@ -540,6 +587,26 @@ class ServerTests(unittest.TestCase):
 
         status, payload = self.post_json(
             "/api/v1/autostart/remove", {"confirm": True}
+        )
+        self.assertEqual(status, 200)
+        self.assertFalse(payload["status"]["installed"])
+
+    def test_panel_autostart_is_independent_and_requires_confirmation(self):
+        status, payload = self.get_json("/api/v1/panel-autostart")
+        self.assertEqual(status, 200)
+        self.assertFalse(payload["installed"])
+
+        status, _ = self.post_json("/api/v1/panel-autostart/install", {})
+        self.assertEqual(status, 400)
+        status, payload = self.post_json(
+            "/api/v1/panel-autostart/install", {"confirm": True}
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["status"]["installed"])
+        self.assertFalse(self.backend.autostart_status()["installed"])
+
+        status, payload = self.post_json(
+            "/api/v1/panel-autostart/remove", {"confirm": True}
         )
         self.assertEqual(status, 200)
         self.assertFalse(payload["status"]["installed"])
