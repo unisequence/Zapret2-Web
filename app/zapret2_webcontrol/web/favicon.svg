@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Zapret2 WebControl">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#294e73" />
+      <stop offset="1" stop-color="#172331" />
+    </linearGradient>
+    <linearGradient id="mark" x1="18" y1="18" x2="47" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#d8f2ff" />
+      <stop offset="1" stop-color="#69c7ff" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#bg)" />
+  <path d="M17 22h30M17 32h20M17 42h14" fill="none" stroke="url(#mark)" stroke-width="5" stroke-linecap="round" />
+  <circle cx="46" cy="42" r="7" fill="#a6f4ce" />
+  <path d="m42.5 42 2.2 2.2 4.8-5" fill="none" stroke="#10251f" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+</svg>

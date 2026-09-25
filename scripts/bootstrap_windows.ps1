@@ -1,0 +1,146 @@
+[CmdletBinding()]
+param(
+    [switch]$SkipBundle
+)
+
+$ErrorActionPreference = "Stop"
+
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$bundleRoot = Join-Path $projectRoot "vendor\zapret-win-bundle"
+$blobRoot = Join-Path $projectRoot "runtime\blobs"
+$bundleCommit = "6eb463a6758fb48cd101bc55dfd057e6e9d98af1"
+
+function Invoke-GitChecked {
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arguments)
+
+    & git @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git завершился с кодом ${LASTEXITCODE}: git $($Arguments -join ' ')"
+    }
+}
+
+function Install-ZapretBundle {
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        throw "Git не найден. Установите Git for Windows или используйте -SkipBundle."
+    }
+
+    if (-not (Test-Path -LiteralPath $bundleRoot)) {
+        New-Item -ItemType Directory -Path (Split-Path $bundleRoot) -Force | Out-Null
+        Invoke-GitChecked -Arguments @(
+            "clone",
+            "https://github.com/bol-van/zapret-win-bundle.git",
+            $bundleRoot
+        )
+    }
+    elseif (-not (Test-Path -LiteralPath (Join-Path $bundleRoot ".git"))) {
+        throw "Каталог $bundleRoot уже существует, но не является Git checkout."
+    }
+
+    $currentCommit = (& git -C $bundleRoot rev-parse HEAD).Trim()
+    if ($LASTEXITCODE -ne 0) {
+        throw "Не удалось определить commit Windows-бандла."
+    }
+    if ($currentCommit -ne $bundleCommit) {
+        $dirty = & git -C $bundleRoot status --porcelain
+        if ($LASTEXITCODE -ne 0) {
+            throw "Не удалось проверить состояние Windows-бандла."
+        }
+        if ($dirty) {
+            throw "В Windows-бандле есть локальные изменения; bootstrap не будет их перезаписывать."
+        }
+        Invoke-GitChecked -Arguments @(
+            "-C", $bundleRoot, "fetch", "origin", $bundleCommit
+        )
+        Invoke-GitChecked -Arguments @(
+            "-C", $bundleRoot, "checkout", "--detach", $bundleCommit
+        )
+    }
+
+    $required = @(
+        "zapret-winws\winws2.exe",
+        "zapret-winws\lua\zapret-lib.lua",
+        "zapret-winws\lua\zapret-antidpi.lua",
+        "zapret-winws\lua\zapret-auto.lua",
+        "zapret-winws\windivert.filter\windivert_part.discord_media.txt",
+        "zapret-winws\windivert.filter\windivert_part.stun.txt",
+        "blockcheck\zapret2\blockcheck2.sh",
+        "cygwin\bin\bash.exe",
+        "cygwin\bin\cygpath.exe",
+    )
+    foreach ($relativePath in $required) {
+        if (-not (Test-Path -LiteralPath (Join-Path $bundleRoot $relativePath))) {
+            throw "В закреплённом Windows-бандле отсутствует: $relativePath"
+        }
+    }
+    Write-Host "Windows-бандл готов: $bundleCommit"
+}
+
+function Install-VerifiedBlob {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][string]$Uri,
+        [Parameter(Mandatory = $true)][string]$Sha256
+    )
+
+    $target = Join-Path $blobRoot $Name
+    if (Test-Path -LiteralPath $target) {
+        $existingHash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+        if ($existingHash -eq $Sha256) {
+            Write-Host "Payload уже проверен: $Name"
+            return
+        }
+    }
+
+    $temporary = "$target.download"
+    try {
+        Invoke-WebRequest -Uri $Uri -OutFile $temporary -UseBasicParsing
+        $downloadedHash = (Get-FileHash -LiteralPath $temporary -Algorithm SHA256).Hash
+        if ($downloadedHash -ne $Sha256) {
+            throw "SHA-256 не совпал для $Name. Ожидался $Sha256, получен $downloadedHash."
+        }
+        Move-Item -LiteralPath $temporary -Destination $target -Force
+        Write-Host "Payload установлен: $Name"
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporary) {
+            Remove-Item -LiteralPath $temporary -Force
+        }
+    }
+}
+
+if (-not $SkipBundle) {
+    Install-ZapretBundle
+}
+
+New-Item -ItemType Directory -Path $blobRoot -Force | Out-Null
+
+$flowsealCommit = "865da4f4c3659523bf79bc6edf0446e7d7969614"
+$openwrtCommit = "1b04a87558ec7965bfed0ef7fb557997872dd699"
+$resources = @(
+    @{
+        Name = "quic_initial_steamcommunity_com.bin"
+        Uri = "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/$flowsealCommit/bin/quic_initial_steamcommunity_com.bin"
+        Sha256 = "2FE18B3BD20807D36704D0B072092EE49AE84EDCA907A4420AB9A0F0F28FDDCF"
+    },
+    @{
+        Name = "stun2.bin"
+        Uri = "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/$flowsealCommit/bin/stun2.bin"
+        Sha256 = "B7C2497496039C541F7337AC8536813F0A1CF52363AB2FAA5213B7816D458813"
+    },
+    @{
+        Name = "quic_initial_4pda_to.bin"
+        Uri = "https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/$flowsealCommit/bin/quic_initial_4pda_to.bin"
+        Sha256 = "E065870CB0D13152E6132807BBF42218A9E7CD8D96F5602B61674CC540F3A56E"
+    },
+    @{
+        Name = "tls_clienthello_www_onetrust_com.bin"
+        Uri = "https://raw.githubusercontent.com/remittor/zapret-openwrt/$openwrtCommit/zapret/files/fake/tls_clienthello_www_onetrust_com.bin"
+        Sha256 = "4EE0870ABE0A0128600B0095189987BA1D210DAE8BF963BC725AFF49CF922624"
+    }
+)
+
+foreach ($resource in $resources) {
+    Install-VerifiedBlob @resource
+}
+
+Write-Host "Ресурсы Windows готовы. Запустите .\run.ps1"

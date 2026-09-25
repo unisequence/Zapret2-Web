@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zapret2-webcontrol"
+version = "0.1.0"
+description = "Local cross-platform web control panel for zapret2"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+zapret2-webcontrol = "zapret2_webcontrol.server:run"
+
+[tool.setuptools.packages.find]
+where = ["app"]
+
+[tool.pytest.ini_options]
+pythonpath = ["app"]
+testpaths = ["tests"]

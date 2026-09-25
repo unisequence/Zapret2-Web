@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zapret2</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+    <link rel="stylesheet" href="/assets/style.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <div>
+          <h1>Zapret2</h1>
+          <p>Инструмент обхода DPI с поддержкой Lua-скриптов</p>
+        </div>
+        <span id="connection" class="status-pill status-muted">Проверка связи…</span>
+      </header>
+
+      <nav class="tabs" aria-label="Разделы панели">
+        <button class="tab is-active" data-tab="strategies">Стратегии обхода</button>
+        <button class="tab" data-tab="settings">Настройки</button>
+        <button class="tab" data-tab="scripts">Скрипты</button>
+        <button class="tab" data-tab="lists">Списки</button>
+        <button class="tab" data-tab="autolist">Автолист</button>
+        <button class="tab" data-tab="blockcheck">Blockcheck2</button>
+        <button class="tab" data-tab="logs">Журналы отладки</button>
+      </nav>
+
+      <section class="control-card">
+        <div class="status-grid">
+          <div class="status-row"><span>Статус</span><strong id="runtime-summary" class="status-pill status-muted">Загрузка…</strong></div>
+          <div class="status-row"><span>Конфигурация</span><strong id="configuration-summary" class="status-pill status-muted">Проверка…</strong></div>
+          <div class="status-row"><span>Автозапуск</span><strong id="autostart-summary" class="status-pill status-muted">Проверка…</strong></div>
+        </div>
+        <div class="control-footer">
+          <button class="button button-ghost" id="autostart-toggle">Включить автозапуск</button>
+          <div class="button-group">
+            <button class="button button-primary" id="sync-autostart" hidden>Применить к службе</button>
+            <button class="button button-secondary" id="refresh">Обновить статус</button>
+            <button class="button button-secondary" id="preview-command">Показать команду</button>
+            <button class="button button-primary" id="start-runtime">Запустить</button>
+            <button class="button button-danger-outline" id="stop-runtime">Остановить</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="tab-panel is-active" data-panel="strategies">
+        <div class="panel-heading"><div><h2>Стратегии обхода</h2><p>Управление профилями, их порядком и параметрами обработки.</p></div><div class="panel-actions"><span id="strategy-count" class="muted">—</span><button class="button button-small button-primary" id="add-strategy">Добавить стратегию</button><button class="button button-small button-danger-outline" id="reset-strategies">Сбросить изменения</button></div></div>
+        <div class="table-wrap">
+          <div class="strategy-table table-head"><span>Стратегия</span><span>Порт</span><span>Протокол</span><span>Фильтр L7</span><span>Списки</span><span>Действия</span></div>
+          <div id="strategy-list"></div>
+        </div>
+      </section>
+
+      <section class="tab-panel" data-panel="settings">
+        <div class="panel-heading"><div><h2>Настройки</h2><p>Основные параметры обработки и перехвата трафика.</p></div></div>
+        <div class="settings-grid">
+          <label>Режим диагностики<input value="Только просмотр" disabled /></label>
+          <label>Движок<input id="engine-path" value="Определяется…" disabled /></label>
+          <label>Перехват<input value="WinDivert / исходящий трафик" disabled /></label>
+          <label>Lua runtime<input value="zapret-lib + antidpi + auto" disabled /></label>
+          <label>Служба<input id="service-name" value="zapret2-webcontrol" disabled /></label>
+          <label>Состояние службы<input id="service-state" value="Определяется…" disabled /></label>
+        </div>
+        <div class="notice">Запуск требует подтверждения и использует только процесс, запущенный этой панелью. Чужой экземпляр winws2 панель не завершает.</div>
+      </section>
+
+      <section class="tab-panel" data-panel="scripts">
+        <div class="panel-heading"><div><h2>Скрипты</h2><p>Сценарии и библиотеки, подключаемые к профилям.</p></div></div>
+        <div class="resource-list"><div>zapret-lib.lua <span>базовая библиотека</span></div><div>zapret-antidpi.lua <span>функции desync</span></div><div>zapret-auto.lua <span>автоматический подбор</span></div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="lists">
+        <div class="panel-heading"><div><h2>Списки</h2><p>Доменные списки для профилей обработки.</p></div></div>
+        <div id="list-resources" class="resource-list"><div>Загрузка списков…</div></div>
+      </section>
+
+      <section class="tab-panel" data-panel="autolist">
+        <div class="panel-heading"><div><h2>Автолист</h2><p>Локальный список автоматически обнаруженных хостов. Детектор будет подключён отдельным этапом.</p></div><span id="autolist-summary" class="muted">—</span></div>
+        <textarea id="autolist-content" class="large-textarea" placeholder="Автоматически обнаруженные хосты" spellcheck="false"></textarea>
+        <div class="button-group"><button class="button button-primary" id="save-autolist">Сохранить хосты</button><button class="button button-ghost" id="reload-autolist">Обновить</button></div>
+      </section>
+
+      <section class="tab-panel" data-panel="blockcheck">
+        <div class="panel-heading"><div><h2>Blockcheck2</h2><p>Проверка доступности ресурсов и подбор профилей.</p></div><strong id="blockcheck-status" class="status-pill status-muted">Проверка…</strong></div>
+        <div class="notice warning-notice">Перед тестом остановите все DPI bypass-программы и VPN. На Windows официальный Blockcheck2 включает TCP timestamps и временно запускает собственные фильтры WinDivert.</div>
+        <div class="settings-grid blockcheck-settings">
+          <label>Домен или URI<input id="blockcheck-domain" value="rutracker.org" /></label>
+          <label>Набор тестов<select id="blockcheck-test"><option value="standard">standard</option><option value="custom">custom</option></select></label>
+          <label>Уровень<select id="blockcheck-level"><option value="quick">quick</option><option value="standard" selected>standard</option><option value="force">force</option></select></label>
+          <label>IP<select id="blockcheck-ip"><option value="4">IPv4</option><option value="6">IPv6</option><option value="46">IPv4 + IPv6</option></select></label>
+          <label>Повторы<input id="blockcheck-repeats" type="number" min="1" max="10" value="1" /></label>
+          <label>Тайм-аут, сек.<input id="blockcheck-timeout" type="number" min="1" max="30" value="2" /></label>
+        </div>
+        <div class="option-grid">
+          <label class="toggle-field"><span>HTTP</span><input id="blockcheck-http" type="checkbox" /></label>
+          <label class="toggle-field"><span>HTTPS TLS 1.2</span><input id="blockcheck-tls12" type="checkbox" checked /></label>
+          <label class="toggle-field"><span>HTTPS TLS 1.3</span><input id="blockcheck-tls13" type="checkbox" /></label>
+          <label class="toggle-field"><span>HTTP/3 QUIC</span><input id="blockcheck-http3" type="checkbox" /></label>
+          <label class="toggle-field"><span>Параллельный запуск</span><input id="blockcheck-parallel" type="checkbox" /></label>
+          <label class="toggle-field"><span>Пропустить DNS</span><input id="blockcheck-skip-dns" type="checkbox" /></label>
+          <label class="toggle-field"><span>Пропустить IP block</span><input id="blockcheck-skip-ip" type="checkbox" /></label>
+        </div>
+        <div class="blockcheck-actions">
+          <div class="button-group"><button class="button button-primary" id="start-blockcheck">Запустить тест</button><button class="button button-danger-outline" id="stop-blockcheck" disabled>Остановить</button><button class="button button-ghost" id="refresh-blockcheck">Обновить</button></div>
+          <span id="blockcheck-timing" class="muted">—</span>
+        </div>
+        <pre id="blockcheck-log" class="log-box blockcheck-log">Лог пока пуст.</pre>
+      </section>
+
+      <section class="tab-panel" data-panel="logs">
+        <div class="panel-heading"><div><h2>Журналы отладки</h2><p id="runtime-log-path">События и вывод диагностики.</p></div><div class="button-group"><button class="button button-small button-ghost" id="refresh-log">Обновить</button><button class="button button-small button-danger-outline" id="clear-log">Очистить</button></div></div>
+        <pre id="runtime-log" class="log-box">Загрузка…</pre>
+      </section>
+
+      <section id="preview-panel" class="preview-panel" hidden>
+        <div class="panel-heading"><div><h2>Предпросмотр команды</h2></div><button class="button button-ghost" id="close-preview">Закрыть</button></div>
+        <pre id="command-preview" class="command-box">Загрузка…</pre>
+        <div id="preview-warnings" class="warning-list"></div>
+      </section>
+
+      <dialog id="strategy-dialog" aria-labelledby="strategy-dialog-title">
+        <form id="strategy-form" class="dialog-form">
+          <div class="panel-heading">
+            <div><h2 id="strategy-dialog-title">Редактирование стратегии</h2><p id="strategy-dialog-subtitle">—</p></div>
+            <button type="button" class="button button-small button-ghost" id="cancel-strategy-top">Закрыть</button>
+          </div>
+          <input type="hidden" id="strategy-id" />
+          <div class="dialog-grid">
+            <label class="field-wide">Название<input id="strategy-name" required maxlength="80" placeholder="Моя стратегия" /></label>
+            <label class="toggle-field"><span>Стратегия включена</span><input type="checkbox" id="strategy-enabled" /></label>
+            <label>Протокол<select id="strategy-protocol"><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
+            <label>Порты<input id="strategy-ports" required placeholder="443, 2053-2083" /></label>
+            <label>Фильтр L7<input id="strategy-l7" placeholder="tls, discord" /></label>
+            <label class="field-wide">Hostlist<input id="strategy-hostlist" placeholder="discord, youtube или имя файла" /></label>
+            <label class="field-wide">Параметры стратегии — один аргумент на строку<textarea id="strategy-options" class="editor-textarea" spellcheck="false"></textarea></label>
+          </div>
+          <div id="strategy-metadata" class="notice"></div>
+          <div id="strategy-error" class="form-error" hidden></div>
+          <div class="dialog-actions">
+            <button type="button" class="button button-ghost" id="cancel-strategy">Отмена</button>
+            <button type="submit" class="button button-primary" id="save-strategy">Сохранить</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="list-dialog" aria-labelledby="list-dialog-title">
+        <form id="list-form" class="dialog-form">
+          <div class="panel-heading">
+            <div><h2 id="list-dialog-title">Редактирование списка</h2><p id="list-dialog-subtitle">—</p></div>
+            <button type="button" class="button button-small button-ghost" id="cancel-list-top">Закрыть</button>
+          </div>
+          <input type="hidden" id="list-id" />
+          <label>Содержимое — одна запись на строку<textarea id="list-content" class="editor-textarea list-editor" spellcheck="false"></textarea></label>
+          <div id="list-error" class="form-error" hidden></div>
+          <div class="dialog-actions">
+            <button type="button" class="button button-ghost" id="cancel-list">Отмена</button>
+            <button type="submit" class="button button-primary" id="save-list">Сохранить</button>
+          </div>
+        </form>
+      </dialog>
+
+      <div id="flash" class="flash" hidden></div>
+
+      <footer>Локальная панель · <span id="checked-at">—</span></footer>
+    </main>
+    <script src="/assets/app.js" defer></script>
+  </body>
+</html>
